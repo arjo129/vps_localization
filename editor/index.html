@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Floor Plan Annotator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #canvasWrapper { position: relative; display: inline-block; }
+        #floorCanvas { border: 1px solid #ccc; cursor: crosshair; }
+        #annotations { margin-top: 20px; }
+        .annotation { margin-bottom: 5px; }
+        #uploadInput { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Floor Plan Annotator</h2>
+    <input type="file" id="uploadInput" accept="image/*">
+    <div id="canvasWrapper">
+        <canvas id="floorCanvas" width="800" height="600"></canvas>
+    </div>
+    <div id="annotations">
+        <h3>Annotations <button>Export</button></h3>
+        <div id="annotationList"></div>
+    </div>
+    <script>
+        const uploadInput = document.getElementById('uploadInput');
+        const canvas = document.getElementById('floorCanvas');
+        const ctx = canvas.getContext('2d');
+        const annotationList = document.getElementById('annotationList');
+        let img = new Image();
+        let imgLoaded = false;
+
+        let isDrawing = false;
+        let startX, startY, endX, endY;
+        let annotations = [];
+
+        // Export annotations as JSON
+        document.querySelector('#annotations button').onclick = function() {
+            const dataStr = JSON.stringify(annotations, null, 2);
+            const blob = new Blob([dataStr], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'annotations.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
+
+        uploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+            img.onload = function() {
+                imgLoaded = true;
+                canvas.width = img.width;
+                canvas.height = img.height;
+                draw();
+            };
+            img.src = evt.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (imgLoaded) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            // Draw existing annotations (polygons)
+            annotations.forEach(a => {
+            ctx.beginPath();
+            ctx.moveTo(a.points[0].x, a.points[0].y);
+            for (let i = 1; i < a.points.length; i++) {
+                ctx.lineTo(a.points[i].x, a.points[i].y);
+            }
+            ctx.closePath();
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255,0,0,0.2)';
+            ctx.fill();
+            // Draw label at centroid
+            let cx = 0, cy = 0;
+            a.points.forEach(p => { cx += p.x; cy += p.y; });
+            cx /= a.points.length;
+            cy /= a.points.length;
+            ctx.fillStyle = 'black';
+            ctx.font = '16px Arial';
+            ctx.fillText(a.label, cx + 4, cy + 18);
+            });
+            // Draw current polygon
+            if (isDrawing && currentPoints.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
+            for (let i = 1; i < currentPoints.length; i++) {
+                ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
+            }
+            if (showPreviewPoint) {
+                ctx.lineTo(previewPoint.x, previewPoint.y);
+            }
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            }
+        }
+
+        let currentPoints = [];
+        let showPreviewPoint = false;
+        let previewPoint = {x:0, y:0};
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (!imgLoaded) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            if (!isDrawing) {
+            isDrawing = true;
+            currentPoints = [{x, y}];
+            showPreviewPoint = false;
+            } else {
+            // If close to first point, finish polygon
+            const first = currentPoints[0];
+            const dist = Math.hypot(x - first.x, y - first.y);
+            if (dist < 10 && currentPoints.length >= 3) {
+                isDrawing = false;
+                showPreviewPoint = false;
+                const label = prompt('Enter shop label:');
+                if (label) {
+                annotations.push({ points: [...currentPoints], label });
+                updateAnnotationList();
+                }
+                currentPoints = [];
+                draw();
+                return;
+            }
+            currentPoints.push({x, y});
+            }
+            draw();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing || currentPoints.length === 0) return;
+            const rect = canvas.getBoundingClientRect();
+            previewPoint.x = e.clientX - rect.left;
+            previewPoint.y = e.clientY - rect.top;
+            showPreviewPoint = true;
+            draw();
+        });
+
+        canvas.addEventListener('dblclick', (e) => {
+            // Double click to finish polygon
+            if (isDrawing && currentPoints.length >= 3) {
+            isDrawing = false;
+            showPreviewPoint = false;
+            const label = prompt('Enter shop label:');
+            if (label) {
+                annotations.push({ points: [...currentPoints], label });
+                updateAnnotationList();
+            }
+            currentPoints = [];
+            draw();
+            }
+        });
+
+        function updateAnnotationList() {
+            annotationList.innerHTML = '';
+            annotations.forEach((a, i) => {
+                const div = document.createElement('div');
+                div.className = 'annotation';
+
+                // Create editable label span
+                const labelSpan = document.createElement('span');
+                labelSpan.textContent = a.label;
+                labelSpan.contentEditable = true;
+                labelSpan.style.outline = '1px dashed #aaa';
+                labelSpan.style.padding = '2px 4px';
+                labelSpan.addEventListener('blur', () => {
+                    a.label = labelSpan.textContent.trim();
+                    draw();
+                });
+                labelSpan.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        labelSpan.blur();
+                    }
+                });
+
+                // Points string
+                const pointsStr = a.points.map(p => `[${Math.round(p.x)},${Math.round(p.y)}]`).join(', ');
+
+                // Delete button
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Delete';
+                delBtn.onclick = () => {
+                    annotations.splice(i, 1);
+                    updateAnnotationList();
+                    draw();
+                };
+
+                div.appendChild(labelSpan);
+                div.appendChild(document.createTextNode(' ' + pointsStr + ' '));
+                div.appendChild(delBtn);
+                annotationList.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>
