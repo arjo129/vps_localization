@@ -245,18 +245,18 @@
             if (!imgLoaded) return;
             if (tool === 'polygon') {
             if (!isDrawing || currentPoints.length === 0) return;
-            const rect = canvas.getBoundingClientRect();
-            previewPoint.x = e.clientX - rect.left;
-            previewPoint.y = e.clientY - rect.top;
-            showPreviewPoint = true;
-            draw();
+                const rect = canvas.getBoundingClientRect();
+                previewPoint.x = e.clientX - rect.left;
+                previewPoint.y = e.clientY - rect.top;
+                showPreviewPoint = true;
+                draw();
             } else if (tool === 'corridor') {
             if (!isCorridorDrawing) return;
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            corridorPoints.push({x, y});
-            draw();
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                corridorPoints.push({x, y});
+                draw();
             }
         });
 
@@ -269,8 +269,8 @@
                 showPreviewPoint = false;
                 const label = prompt('Enter shop label:');
                 if (label) {
-                annotations.push({ type: 'polygon', points: [...currentPoints], label });
-                updateAnnotationList();
+                    annotations.push({ type: 'polygon', points: [...currentPoints], label });
+                    updateAnnotationList();
                 }
                 currentPoints = [];
                 draw();
@@ -282,15 +282,15 @@
         canvas.addEventListener('mousedown', (e) => {
             if (!imgLoaded) return;
             if (tool === 'corridor') {
-            if (!isCorridorDrawing) {
-                isCorridorDrawing = true;
-                corridorPoints = [];
-                const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                corridorPoints.push({x, y});
-                draw();
-            }
+                if (!isCorridorDrawing) {
+                    isCorridorDrawing = true;
+                    corridorPoints = [];
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    corridorPoints.push({x, y});
+                    draw();
+                }
             }
         });
 
