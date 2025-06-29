@@ -11,4 +11,5 @@ dependencies = [
     "python-multipart>=0.0.20",
     "matplotlib>=3.7.0",
     "numpy>=1.24.0",
+    "tqdm>=4.67.1",
 ]

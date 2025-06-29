@@ -58,6 +58,7 @@ async def upload_image(file: UploadFile = File(...)):
         #return response.text
 
     gemini_result = await asyncio.to_thread(call_gemini)
+    
     return JSONResponse({
         "list": gemini_result
     })

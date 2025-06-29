@@ -5,6 +5,8 @@ import matplotlib.patches as patches
 from matplotlib.patches import Polygon
 from collections import defaultdict
 import os
+import pickle
+import tqdm
 
 def load_annotations(file_path):
     """Load annotations from JSON file."""
@@ -117,7 +119,7 @@ def create_grid_from_polygons(annotations, grid_resolution=1.0):
     
     return grid, grid_info
 
-def sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov, radius=50):
+def sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov, radius=100):
     """
     Sample visible shops from the grid based on a center point and direction.
     
@@ -149,11 +151,41 @@ def sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov, radius=50):
             
             if 0 <= sample_x < grid.shape[1] and 0 <= sample_y < grid.shape[0]:
                 label = grid[sample_y, sample_x]
-                if label.startswith('shop:'):
-                    visible_shops.add(label)
+                visible_shops.add(label)
+                break  # Stop at first visible shop in this direction
     
-    return list(visible_shops)
+    return tuple(visible_shops)
 
+def preprocess_visible_shops(annotations, grid, grid_info, radius=100):
+    """
+    Go through all the corridor points and find visible shops.
+    """
+    visible_shops = {}
+    explored = set()
+    for annotation in tqdm.tqdm(annotations):
+        if annotation.get('type') != 'corridor':
+            continue
+        
+        points = annotation.get('points', [])
+        if not points:
+            continue
+        
+        for point in points:
+            cx = int(point['x'])
+            cy = int(point['y'])
+            if (cx, cy) in explored:
+                continue
+            explored.add((cx, cy))
+            # Sample visible shops in all directions
+            for dir in range(0, 360, 30):  # Sample every 30 degrees
+                shops = sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov=60, radius=radius)
+                if shops in visible_shops:
+                    visible_shops[shops].append((cx, cy, dir))
+                else:
+                    visible_shops[shops] = [(cx, cy, dir)]
+    
+    return visible_shops
+    
 def plot_polygons_matplotlib(annotations, grid=None, grid_info=None, save_path=None):
     """
     Plot polygons using matplotlib with better visualization.
@@ -291,7 +323,8 @@ def main():
         return
     
     # Process each file
-    all_annotations = []
+    all_shops = []
+    corridors = []
     for file_type, file_path in files_to_process:
         print(f"Loading {file_type} annotations from: {file_path}")
         annotations = load_annotations(file_path)
@@ -300,23 +333,25 @@ def main():
         for annotation in annotations:
             if 'type' not in annotation:
                 annotation['type'] = file_type
+
+        corridors.extend([a for a in annotations if a.get('type') == 'corridor'])
         # Remove all annotations of type 'corridor'
         annotations = [a for a in annotations if a.get('type') != 'corridor']
-        all_annotations.extend(annotations)
+        all_shops.extend(annotations)
         print(f"Loaded {len(annotations)} {file_type} annotations")
     
-    print(f"\nTotal annotations loaded: {len(all_annotations)}")
+    print(f"\nTotal annotations loaded: {len(all_shops)}")
     
     # Create grid representation
     print("\nCreating 2D grid representation...")
-    grid, grid_info = create_grid_from_polygons(all_annotations, grid_resolution=2.0)
+    grid, grid_info = create_grid_from_polygons(all_shops, grid_resolution=2.0)
     
     # Print grid statistics
     print_grid_statistics(grid, grid_info)
     
     # Create matplotlib visualization
     print("\nCreating matplotlib visualization...")
-    fig, ax = plot_polygons_matplotlib(all_annotations, grid, grid_info, 
+    fig, ax = plot_polygons_matplotlib(all_shops, grid, grid_info, 
                                      save_path="polygon_visualization.png")
     
     # Store grid in memory for later use
@@ -337,11 +372,18 @@ def main():
             real_y = grid_info['min_y'] + y * grid_info['resolution']
             print(f"  Grid[{y}, {x}] = '{grid[y, x]}' (real coords: {real_x:.1f}, {real_y:.1f})")
     
-    return grid, grid_info, all_annotations
+    return grid, grid_info, all_shops, corridors
 
 if __name__ == "__main__":
     # Run the main function and keep results in memory
-    grid, grid_info, annotations = main()
+    grid, grid_info, annotations, corridors = main()
+
+    print("Corridors loaded: {len(corridors)}")
+
+    result = preprocess_visible_shops(corridors, grid, grid_info, radius=50)
+    json_result = pickle.dumps(result)
+    with open("visible_shops.pickle", "w") as f:
+        f.write(json_result)
     
     print(f"\nScript completed! Grid and annotations are available in memory.")
     print(f"Variables available:")
