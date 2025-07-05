@@ -143,18 +143,20 @@ def sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov, radius=100):
     # Sample points in a circle around the center
     for angle in np.linspace(0, fov, num=360):
         for r in range(radius):
-            x_offset = int(r * np.cos(angle + np.radians(dir)))
-            y_offset = int(r * np.sin(angle + np.radians(dir)))
+            x_offset = int(r * np.cos(np.radians(angle + dir)))
+            y_offset = int(r * np.sin(np.radians(angle + dir)))
             
             sample_x = grid_x + x_offset
             sample_y = grid_y + y_offset
             
             if 0 <= sample_x < grid.shape[1] and 0 <= sample_y < grid.shape[0]:
                 label = grid[sample_y, sample_x]
+                if label == 'background':
+                    continue
                 visible_shops.add(label)
                 break  # Stop at first visible shop in this direction
     
-    return tuple(visible_shops)
+    return tuple(sorted(visible_shops))
 
 def preprocess_visible_shops(annotations, grid, grid_info, radius=100):
     """
@@ -177,8 +179,8 @@ def preprocess_visible_shops(annotations, grid, grid_info, radius=100):
                 continue
             explored.add((cx, cy))
             # Sample visible shops in all directions
-            for dir in range(0, 360, 30):  # Sample every 30 degrees
-                shops = sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov=60, radius=radius)
+            for dir in range(0, 360, 15):  # Sample every 30 degrees
+                shops = sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov=30, radius=radius)
                 if shops in visible_shops:
                     visible_shops[shops].append((cx, cy, dir))
                 else:
@@ -186,45 +188,62 @@ def preprocess_visible_shops(annotations, grid, grid_info, radius=100):
     
     return visible_shops
     
-def plot_polygons_matplotlib(annotations, grid=None, grid_info=None, save_path=None):
+def plot_polygons_with_heatmap(annotations, grid=None, grid_info=None, initial_particles=None, save_path=None):
     """
-    Plot polygons using matplotlib with better visualization.
-    
+    Plot polygons using matplotlib and optionally overlay a heatmap.
+
     Args:
         annotations: List of annotation objects
         grid: Optional grid array for background
         grid_info: Optional grid metadata
+        initial_particles: x,y coordinates for initial particles
         save_path: Optional path to save the plot
     """
     fig, ax = plt.subplots(1, 1, figsize=(15, 12))
-    
+
     # Get bounds for plotting
     min_x, min_y, max_x, max_y = get_polygon_bounds(annotations)
-    
+
+    # Overlay heatmap if provided
+    # Overlay scatterplot of initial particles if provided
+    if initial_particles is not None:
+        initial_particles = np.array(initial_particles)
+        if initial_particles.ndim == 2 and initial_particles.shape[1] >= 2:
+            ax.scatter(
+                initial_particles[:, 0],  # x coordinates
+                initial_particles[:, 1],  # y coordinates
+                c='yellow',
+                s=20,
+                edgecolors='black',
+                alpha=0.8,
+                label='Initial Particles',
+                zorder=10
+            )
+        else:
+            print("Warning: initial_particles should be a 2D array with shape (N, 2) for x,y coordinates.")
+
     # Create color map for different types and labels
     type_colors = {
         'polygon': 'blue',
         'corridor': 'red',
         'unknown': 'gray'
     }
-    
+
     label_colors = {}
     color_index = 0
-    
+
     # Plot each annotation
     for annotation in annotations:
         points = annotation.get('points', [])
         label = annotation.get('label', 'unlabeled')
         annotation_type = annotation.get('type', 'unknown')
-        
+
         if not points or len(points) < 3:
             continue
-        
-        # Convert points to coordinate arrays
+
         x_coords = [point['x'] for point in points]
         y_coords = [point['y'] for point in points]
-        
-        # Get color for this label
+
         if label not in label_colors:
             if annotation_type in type_colors:
                 base_color = type_colors[annotation_type]
@@ -232,60 +251,52 @@ def plot_polygons_matplotlib(annotations, grid=None, grid_info=None, save_path=N
                 base_color = plt.cm.tab20(color_index % 20)
                 color_index += 1
             label_colors[label] = base_color
-        
+
         color = label_colors[label]
-        
-        # Create polygon patch
+
         polygon_coords = list(zip(x_coords, y_coords))
-        polygon_patch = Polygon(polygon_coords, 
-                              facecolor=color, 
-                              edgecolor='black', 
-                              alpha=0.6, 
-                              linewidth=1)
+        polygon_patch = Polygon(
+            polygon_coords,
+            facecolor=color,
+            edgecolor='black',
+            alpha=0.6,
+            linewidth=1
+        )
         ax.add_patch(polygon_patch)
-        
-        # Add label text at centroid
+
         centroid_x = sum(x_coords) / len(x_coords)
         centroid_y = sum(y_coords) / len(y_coords)
-        
-        # Adjust text size based on polygon size
-        text_size = min(12, max(6, len(label)))
-        ax.text(centroid_x, centroid_y, label, 
-               ha='center', va='center', 
-               fontsize=8, 
-               bbox=dict(boxstyle='round,pad=0.2', 
-                        facecolor='white', 
-                        alpha=0.8))
-    
-    # Set plot properties
+        ax.text(
+            centroid_x, centroid_y, label,
+            ha='center', va='center',
+            fontsize=8,
+            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.8)
+        )
+
     ax.set_xlim(min_x - 20, max_x + 20)
     ax.set_ylim(min_y - 20, max_y + 20)
     ax.set_aspect('equal')
     ax.grid(True, alpha=0.3)
     ax.set_xlabel('X Coordinate')
     ax.set_ylabel('Y Coordinate')
-    ax.set_title('Polygon Annotations Visualization')
-    
-    # Invert y-axis to match image coordinates
+    ax.set_title('Polygon Annotations Visualization with Heatmap')
+
     ax.invert_yaxis()
-    
-    # Create legend
+
     legend_elements = []
     for label, color in label_colors.items():
         legend_elements.append(patches.Patch(color=color, label=label))
-    
-    # Split legend into multiple columns if too many items
     ncol = min(3, max(1, len(legend_elements) // 10))
     ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.05, 1), ncol=ncol)
-    
+
     plt.tight_layout()
-    
+
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Plot saved to: {save_path}")
-    
+
     plt.show()
-    
+
     return fig, ax
 
 def print_grid_statistics(grid, grid_info):
@@ -351,7 +362,7 @@ def main():
     
     # Create matplotlib visualization
     print("\nCreating matplotlib visualization...")
-    fig, ax = plot_polygons_matplotlib(all_shops, grid, grid_info, 
+    fig, ax = plot_polygons_with_heatmap(all_shops, grid, grid_info, 
                                      save_path="polygon_visualization.png")
     
     # Store grid in memory for later use
@@ -381,9 +392,10 @@ if __name__ == "__main__":
     print("Corridors loaded: {len(corridors)}")
 
     result = preprocess_visible_shops(corridors, grid, grid_info, radius=50)
-    json_result = pickle.dumps(result)
-    with open("visible_shops.pickle", "w") as f:
-        f.write(json_result)
+    print(result.keys())
+    pickle_result = pickle.dumps(result)
+    with open("visible_shops.pickle", "wb") as f:
+        f.write(pickle_result)
     
     print(f"\nScript completed! Grid and annotations are available in memory.")
     print(f"Variables available:")

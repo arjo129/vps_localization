@@ -48,7 +48,7 @@ It looks something like this:
 It was amazing that I could do this in two prompts. In general I've found vibe coding to be great for building such one-of tools. After that we post-process the annotations. For each point on the corridor we sample potential locations where the list of shops are visible.
 
 ```python
-def preprocess_visible_shops(annotations, grid, grid_info, radius=100):
+def preprocess_visible_shops(annotations, grid, grid_info, radius=50):
     """
     Go through all the corridor points and find visible shops.
     """
@@ -70,7 +70,7 @@ def preprocess_visible_shops(annotations, grid, grid_info, radius=100):
             explored.add((cx, cy))
             # Sample visible shops in all directions
             for dir in range(0, 360, 30):  # Sample every 30 degrees
-                shops = sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov=60, radius=radius)
+                shops = sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov=30, radius=radius)
                 if shops in visible_shops:
                     visible_shops[shops].append((cx, cy, dir))
                 else:
@@ -78,7 +78,7 @@ def preprocess_visible_shops(annotations, grid, grid_info, radius=100):
     
     return visible_shops
 ```
-
+We save the individual poses and the visible shops to a 
 Next we write a small API to query the shapes and return a potential pose
 
 ```python
