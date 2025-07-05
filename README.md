@@ -11,7 +11,7 @@
 > :warning: This code is no way near production ready. I don't intend it to be. IF you want to reproduce the experiment follow the instructions provided.
 
 
-This is a proof-of-concept of an indoor positioning system based on the use of VLMs. It is the result of a bored husband waiting for his wife to finish shopping at sephora. Read more in the blog post [here]().
+This is a proof-of-concept of an indoor positioning system based on the use of VLMs. It is the result of a bored husband waiting for his wife to finish shopping at sephora. Read more in the blog post [here](https://arjo129.github.io/blog/5-7-2025-From-Photos-To-Positions-Prototyping.html).
 
 ## To Create a Floorplan
 
