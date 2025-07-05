@@ -106,4 +106,4 @@ I genuinely believe there’s real potential here, especially with the upcoming 
 
 For now, this is just a fun experiment—so take it as exactly that.
 
-The tools for doing this are all available in this repo:
+The tools for doing this are all available in this repo: https://github.com/arjo129/vps_localization
