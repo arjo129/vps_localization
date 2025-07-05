@@ -1,4 +1,4 @@
-# Indoor Localization in An Era of Software 3.0
+# From Photos to Positions: Prototyping VLM-Based Indoor Maps
 
 > **Disclaimer:**  
 > This project was completed entirely on personal time and hardware. It is not 
