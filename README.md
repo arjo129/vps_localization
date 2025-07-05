@@ -6,25 +6,15 @@
 > or organizations with which I am affiliated. The views and opinions expressed herein 
 > are solely my own and do not represent those of my employer or any associated institutions.
 
-LLMs and VLMs have been eating the world. Last week I decided to listen to a talk by
-Andrej Kaparthy on his view of "software 3.0". Unlike the two extreme views which I seem to be
-surrounded by, Andrej's talk actually is very optimistic without ignoring the pitfalls of LLMs.
-This brought me back to the time that I took on my first paid gig in 2014. I was then in High School,
-I had recently released a small arduino library that was doing waves. Between the recruiter mail and
-all the noise, I found myself doing some freelance work before I recieved my call up for national service. 
-My first customer wanted an "indoor location system" based on the use of BLE beacons. I charged the measly
-sum of $500 (not knowing that I probably could have added 2 zeros to it if I had some business sense).
-It was arelatively simple thing where a user would carry a bluetooth tag and on the server we would
-read the BLE tag and perform a simple Decision Tree based classification and guess which room the tag was in.
-The dashboard was written in PHP with XMPP being the protocol used between the iot sensors (PCDuinos if
-I remember correctly).
+LLMs and VLMs have been eating the world. Last week, I listened to a talk by Andrej Karpathy on his view of "Software 3.0." Unlike the two extreme perspectives I'm usually surrounded by, Andrej’s talk was refreshingly optimistic—without ignoring the pitfalls of LLMs.
 
-This simple idea kind of folowed me around, in undergrad college I wrote a simple app that used AR to show
-directions within our school of computing. It was very far from a working solution as we did not have an accurate
-map to work and align with. Now fast forward to 2025 and I am now married and have to go shopping for gifts. While my wife
-was shopping in a big Shopping Mall in Singapore. I was bored in a corner, so I decided to see if I could vibe code
-something on my phone. Particularly, I was curious if it was possible to try to perform localization in the shopping mall
-with our new found VLM based technologies.
+It took me back to 2014, when I took on my first paid gig. I was still in high school and had recently released a small Arduino library that classified phonemes. Amid recruiter emails and general noise, I somehow ended up doing freelance work before I was called up for national service.
+
+My first client wanted an "indoor location system" using BLE beacons. I charged a measly $500—not realizing I probably could have added two zeros if I had even a shred of business sense. The system was simple: a user would carry a Bluetooth tag, and the server would read the BLE signal and run a basic decision tree classifier to guess which room the tag was in. The dashboard was written in PHP, and we used XMPP as the communication protocol between the IoT sensors (PCDuinos, if I remember correctly).
+
+This idea kind of followed me around. In undergrad, I built a simple app that used AR to show directions within our School of Computing. It was far from a working solution—we didn’t have an accurate map to align things with—but it planted a seed.
+
+Fast forward to 2025. I’m now married and found myself shopping for gifts. While my wife was browsing in a large shopping mall in Singapore, I was bored in a corner and decided to see if I could "vibe-code" something on my phone. I was especially curious: could we use today’s VLM-based technologies to do indoor localization in a mall?
 
 ## VLMs and reading maps
 
@@ -45,7 +35,7 @@ It looks something like this:
 
 ![annot_tool](docs/images/floorplan_annotator.png)
 
-It was amazing that I could do this in two prompts. In general I've found vibe coding to be great for building such one-of tools. After that we post-process the annotations. For each point on the corridor we sample potential locations where the list of shops are visible.
+It was amazing that I could do this in two prompts. In general I've found vibe coding to be great for building such one-of tools. After that we post-process the annotations. For each point on the corridor we determine which shops will be visible based on which direction a user is facing.
 
 ```python
 def preprocess_visible_shops(annotations, grid, grid_info, radius=50):
@@ -70,7 +60,7 @@ def preprocess_visible_shops(annotations, grid, grid_info, radius=50):
             explored.add((cx, cy))
             # Sample visible shops in all directions
             for dir in range(0, 360, 30):  # Sample every 30 degrees
-                shops = sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov=30, radius=radius)
+                shops = sample_grid_visible_shops(grid, grid_info, cx, cy, dir, fov=50, radius=radius)
                 if shops in visible_shops:
                     visible_shops[shops].append((cx, cy, dir))
                 else:
@@ -78,58 +68,42 @@ def preprocess_visible_shops(annotations, grid, grid_info, radius=50):
     
     return visible_shops
 ```
-We save the individual poses and the visible shops to a 
-Next we write a small API to query the shapes and return a potential pose
+We save the individual poses and the visible shops to a pickle file.
+Next we write a small API to query the shops in the image.
 
 ```python
-async def upload_image(file: UploadFile = File(...)):
-    # You can process the file here (e.g., save, analyze, etc.)
-    contents = await file.read()
-    # Forward the image contents to Gemini with a prompt template
+def detect_shops_in_image(image_path):
+    if not os.environ.get("GOOGLE_API_KEY"):
+        raise ValueError("GOOGLE_API_KEY environment variable is not set.")
+
+    with open(image_path, 'rb') as f:
+        image_contents = f.read()
+
     image_part = {
-        "mime_type": file.content_type,
-        "data": contents
+        "mime_type": "image/jpeg",
+        "data": image_contents
     }
 
-    # The google.generativeai (Gemini) API is synchronous as of now.
-    # You cannot use async/await directly with it.
-    # If you want to avoid blocking, run it in a thread pool:
+    # Call Gemini API to detect shops
+    gemini_result = call_gemini(image_part)
 
-    def call_gemini():
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-        # Request Gemini to return structured JSON output
-        response = model.generate_content(
-            [
-            {
-                "role": "user",
-                "parts": [
-                {
-                    "text": (
-                    "List the names of the shops in the image as a JSON array of strings. "
-                    )
-                },
-                image_part
-                ]
-            }
-            ],
-            generation_config={
-            "response_mime_type": "application/json",
-            "response_schema": list[ShopsSeen],
-            }
-        )
-        # Parse the JSON output
-        try:
-            shop_list = json.loads(response.text)
-        except Exception:
-            shop_list = response.text
-        return shop_list
-        #return response.text
-
-    gemini_result = await asyncio.to_thread(call_gemini)
-    return JSONResponse({
-        search_and_mathc_shops(
-
-        )
-    })
+    # Convert the result to a list of shop names
+    return sorted([normalize_shop_name(item["shop_name"]) for item in gemini_result])
 ```
+We can now use our pickled list of shops to match against our pickle file.
+![localization_probs](docs/images/localization_probability.png)
+
+For reference the image I used was:
+![image_of_shops](test.jpg)
+
+This was honestly incredible. Going from a single photo to reasonably accurate map coordinates was genuinely surprising. Despite some ambiguity, the locations marked were correct—I was indeed standing among the yellow circles! It’s amazing that we can localize against an imprecise map using just a bit of prompting and glue code.
+
+Some of the ambiguity likely stems from the fact that we’re only using text-based prompting, rather than feeding both the image and the map directly into the VLM.
+
+Admittedly, this example is somewhat cherry-picked—the photo I used had clearly visible shop signs. Still, it strongly suggests that VLMs can be useful for localization tasks. With video input and additional phone sensor data—perhaps paired with a particle filter—we might be able to further refine the estimate. Alternatively, we could go the "benchmark dataset" route, training a model to map photos to rough map positions more robustly.
+
+I genuinely believe there’s real potential here, especially with the upcoming wave of AR devices. There may also be applications in robotics, though it’s worth noting that there’s a long road from this proof-of-concept to a reliable, production-ready system.
+
+For now, this is just a fun experiment—so take it as exactly that.
+
+The tools for doing this are all available in this repo:
